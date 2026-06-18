@@ -84,6 +84,11 @@ def _predict_one(sample: PredictRequest) -> PredictResponse:
     )
 
 
+@app.get("/")
+def root():
+    return {"status": "ok", "docs": "/docs", "health": "/health"}
+
+
 @app.get("/health", response_model=HealthResponse)
 def health():
     return HealthResponse(
