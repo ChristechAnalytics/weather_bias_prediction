@@ -1,0 +1,465 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Weather Bias Correction</title>
+<style>
+  :root {
+    --bg: #f5f7fa;
+    --card: #ffffff;
+    --border: #e2e8f0;
+    --text: #1a202c;
+    --text-muted: #64748b;
+    --accent: #1d4ed8;
+    --accent-dark: #1e3a8a;
+    --warm: #dc2626;
+    --cold: #2563eb;
+    --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1420;
+      --card: #171d2b;
+      --border: #2a3242;
+      --text: #e6e9ef;
+      --text-muted: #94a3b8;
+      --accent: #5b8def;
+      --accent-dark: #8fb4f5;
+      --warm: #f87171;
+      --cold: #60a5fa;
+      --shadow: 0 1px 3px rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding-block: 32px;
+  }
+  .wrap {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding-inline: 20px;
+  }
+  header {
+    margin-bottom: 28px;
+  }
+  .eyebrow {
+    color: var(--accent);
+    font-weight: 600;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin: 0 0 6px;
+  }
+  h1 {
+    font-size: 28px;
+    margin: 0 0 8px;
+    letter-spacing: -0.01em;
+  }
+  .subtitle {
+    color: var(--text-muted);
+    font-size: 15px;
+    max-width: 640px;
+    line-height: 1.5;
+    margin: 0;
+  }
+  .status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 14px;
+  }
+  .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+  }
+  .dot.ok { background: #22c55e; }
+  .dot.bad { background: var(--warm); }
+
+  .grid {
+    display: grid;
+    grid-template-columns: minmax(280px, 380px) 1fr;
+    gap: 20px;
+    align-items: start;
+  }
+  @media (max-width: 760px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px;
+    box-shadow: var(--shadow);
+  }
+  .card h2 {
+    font-size: 15px;
+    margin: 0 0 16px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+  }
+
+  label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 6px;
+  }
+  .field { margin-bottom: 18px; }
+  .field-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  input[type="range"] {
+    flex: 1;
+    accent-color: var(--accent);
+  }
+  input[type="number"] {
+    width: 100%;
+    padding: 9px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+  }
+  .readout {
+    min-width: 58px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+  .hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+  .examples {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+  }
+  .chip {
+    font-size: 12px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .chip:hover { border-color: var(--accent); color: var(--accent); }
+
+  button.primary {
+    width: 100%;
+    padding: 11px 16px;
+    border-radius: 8px;
+    border: none;
+    background: var(--accent);
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button.primary:hover { background: var(--accent-dark); }
+  button.primary:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .result {
+    margin-top: 20px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+  }
+  .result.hidden { display: none; }
+  .result-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 10px;
+  }
+  .result-label { font-size: 13px; color: var(--text-muted); }
+  .result-value { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .gauge {
+    position: relative;
+    height: 8px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--cold), #cbd5e1 50%, var(--warm));
+    margin: 14px 0 6px;
+  }
+  .gauge-marker {
+    position: absolute;
+    top: -4px;
+    width: 3px;
+    height: 16px;
+    border-radius: 2px;
+    background: var(--text);
+    transform: translateX(-50%);
+    transition: left 0.25s ease;
+  }
+  .gauge-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .error-box {
+    margin-top: 16px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(220, 38, 38, 0.1);
+    color: var(--warm);
+    font-size: 13px;
+    display: none;
+  }
+  .error-box.visible { display: block; }
+
+  .plots {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  .plot-card img {
+    width: 100%;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    display: block;
+  }
+  .plot-card figcaption {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    margin-top: 8px;
+    line-height: 1.4;
+  }
+  figure { margin: 0; }
+
+  footer {
+    margin-top: 32px;
+    padding-top: 18px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--text-muted);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  footer a { color: var(--accent); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">ECMWF Post-Processing</p>
+    <h1>Weather Bias Correction</h1>
+    <p class="subtitle">
+      A Random Forest model trained on live ECMWF forecast data predicts the systematic error
+      in 2m-temperature forecasts from local time-of-day and soil temperature, so it can be
+      subtracted from the raw forecast.
+    </p>
+    <div class="status">
+      <span class="dot" id="status-dot"></span>
+      <span id="status-text">Checking model status…</span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="card">
+      <h2>Try a forecast</h2>
+
+      <div class="examples">
+        <button class="chip" data-time="6" data-soil="-2">Cold Dawn</button>
+        <button class="chip" data-time="14" data-soil="32">Hot Afternoon</button>
+        <button class="chip" data-time="21" data-soil="10">Mild Evening</button>
+      </div>
+
+      <div class="field">
+        <label for="time">Local Time of Day (hours)</label>
+        <div class="field-row">
+          <input type="range" id="time" min="0" max="24" step="0.1" value="12" />
+          <span class="readout" id="time-readout">12.0 h</span>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="soil">Model Soil Temperature (°C)</label>
+        <input type="number" id="soil" value="15" step="0.5" />
+      </div>
+
+      <div class="field">
+        <label for="raw">Raw Forecast Temperature (°C) <span class="hint" style="display:inline">— optional</span></label>
+        <input type="number" id="raw" placeholder="e.g. 18.5" step="0.1" />
+      </div>
+
+      <button class="primary" id="submit">Correct Forecast</button>
+
+      <div class="error-box" id="error-box"></div>
+
+      <div class="result hidden" id="result">
+        <div class="result-row">
+          <span class="result-label">Predicted Bias</span>
+          <span class="result-value" id="error-value">—</span>
+        </div>
+        <div class="gauge">
+          <div class="gauge-marker" id="gauge-marker" style="left:50%"></div>
+        </div>
+        <div class="gauge-labels">
+          <span>Cold Bias</span>
+          <span>Warm Bias</span>
+        </div>
+        <div class="result-row" id="corrected-row" style="margin-top:16px; display:none;">
+          <span class="result-label">Corrected Temperature</span>
+          <span class="result-value" id="corrected-value">—</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="plots">
+      <div class="card plot-card">
+        <h2>Diurnal Bias Wave</h2>
+        <figure>
+          <img src="/plots/diurnal_bias_correction.png" alt="Diurnal bias correction chart" />
+          <figcaption>
+            Observed raw forecast error versus the Random Forest's learned correction profile,
+            binned by local time of day. The model tracks the diurnal wave in the raw bias.
+          </figcaption>
+        </figure>
+      </div>
+      <div class="card plot-card">
+        <h2>Time × Soil Temperature Interaction</h2>
+        <figure>
+          <img src="/plots/interaction_heatmap.png" alt="Interaction heatmap of forecast error" />
+          <figcaption>
+            Average forecast error across combinations of soil temperature and time of day —
+            red indicates a warm bias, blue a cold bias.
+          </figcaption>
+        </figure>
+      </div>
+    </div>
+  </div>
+
+  <footer>
+    <span>Random Forest regression &middot; scikit-learn &middot; FastAPI</span>
+    <a href="https://github.com/ChristechAnalytics/weather_bias_prediction" target="_blank" rel="noopener">View source on GitHub →</a>
+  </footer>
+</div>
+
+<script>
+  const timeInput = document.getElementById('time');
+  const timeReadout = document.getElementById('time-readout');
+  const soilInput = document.getElementById('soil');
+  const rawInput = document.getElementById('raw');
+  const submitBtn = document.getElementById('submit');
+  const result = document.getElementById('result');
+  const errorBox = document.getElementById('error-box');
+  const errorValue = document.getElementById('error-value');
+  const correctedRow = document.getElementById('corrected-row');
+  const correctedValue = document.getElementById('corrected-value');
+  const gaugeMarker = document.getElementById('gauge-marker');
+  const statusDot = document.getElementById('status-dot');
+  const statusText = document.getElementById('status-text');
+
+  function syncTimeReadout() {
+    timeReadout.textContent = parseFloat(timeInput.value).toFixed(1) + ' h';
+  }
+  timeInput.addEventListener('input', syncTimeReadout);
+  syncTimeReadout();
+
+  document.querySelectorAll('.chip').forEach((chip) => {
+    chip.addEventListener('click', () => {
+      timeInput.value = chip.dataset.time;
+      soilInput.value = chip.dataset.soil;
+      syncTimeReadout();
+      runPrediction();
+    });
+  });
+
+  async function checkHealth() {
+    try {
+      const res = await fetch('/health');
+      const data = await res.json();
+      if (data.model_loaded) {
+        statusDot.classList.add('ok');
+        statusText.textContent = 'Model loaded and ready';
+      } else {
+        statusDot.classList.add('bad');
+        statusText.textContent = 'Model not found on server';
+      }
+    } catch (e) {
+      statusDot.classList.add('bad');
+      statusText.textContent = 'Unable to reach API';
+    }
+  }
+
+  function clampPercent(errorC) {
+    const clamped = Math.max(-3, Math.min(3, errorC));
+    return ((clamped + 3) / 6) * 100;
+  }
+
+  async function runPrediction() {
+    errorBox.classList.remove('visible');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Predicting…';
+
+    const payload = {
+      time_of_day: parseFloat(timeInput.value),
+      soil_temperature: parseFloat(soilInput.value),
+    };
+    if (rawInput.value !== '') {
+      payload.raw_forecast_temp = parseFloat(rawInput.value);
+    }
+
+    try {
+      const res = await fetch('/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const detail = await res.json().catch(() => ({}));
+        throw new Error(detail.detail || `Request failed (${res.status})`);
+      }
+      const data = await res.json();
+
+      const err = data.predicted_forecast_error;
+      errorValue.textContent = `${err >= 0 ? '+' : ''}${err.toFixed(2)} °C`;
+      errorValue.style.color = err >= 0 ? 'var(--warm)' : 'var(--cold)';
+      gaugeMarker.style.left = clampPercent(err) + '%';
+
+      if (data.corrected_temperature !== null && data.corrected_temperature !== undefined) {
+        correctedRow.style.display = 'flex';
+        correctedValue.textContent = `${data.corrected_temperature.toFixed(2)} °C`;
+      } else {
+        correctedRow.style.display = 'none';
+      }
+
+      result.classList.remove('hidden');
+    } catch (e) {
+      errorBox.textContent = e.message || 'Something went wrong.';
+      errorBox.classList.add('visible');
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Correct Forecast';
+    }
+  }
+
+  submitBtn.addEventListener('click', runPrediction);
+  checkHealth();
+</script>
+</body>
+</html>

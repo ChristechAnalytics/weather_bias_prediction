@@ -4,10 +4,15 @@ from typing import Annotated
 import joblib
 import numpy as np
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from data_prep import combine_features
-from paths import MODEL_PATH
+from paths import MODEL_PATH, PROJECT_ROOT
+
+STATIC_DIR = PROJECT_ROOT / "static"
+PLOTS_DIR = PROJECT_ROOT / "plots"
 
 _model = None
 
@@ -84,8 +89,15 @@ def _predict_one(sample: PredictRequest) -> PredictResponse:
     )
 
 
+if PLOTS_DIR.exists():
+    app.mount("/plots", StaticFiles(directory=PLOTS_DIR), name="plots")
+
+
 @app.get("/")
 def root():
+    index_path = STATIC_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(index_path)
     return {"status": "ok", "docs": "/docs", "health": "/health"}
 
 
