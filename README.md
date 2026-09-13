@@ -7,7 +7,7 @@
 ![scikit-learn](https://img.shields.io/badge/scikit--learn-RandomForest-F7931E?logo=scikitlearn&logoColor=white)
 ![Render](https://img.shields.io/badge/Deployed%20on-Render-46E3B7?logo=render&logoColor=white)
 
-**Live demo:** _add your Render URL here after deployment_
+**Live demo:** https://weather-bias-prediction.onrender.com
 
 ![App screenshot](docs/screenshot.png)
 
